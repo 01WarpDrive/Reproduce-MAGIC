@@ -129,6 +129,7 @@ def transform_graph(g, node_feature_dim, edge_feature_dim):
 
 def preload_entity_level_dataset(path):
     path = './data/' + path
+    # if prerocessed data exists
     if os.path.exists(path + '/metadata.json'):
         pass
     else:
@@ -146,6 +147,7 @@ def preload_entity_level_dataset(path):
         ) for g in pkl.load(open(path + '/test.pkl', 'rb'))]
         malicious = pkl.load(open(path + '/malicious.pkl', 'rb'))
 
+        # get feature dimension size
         node_feature_dim = 0
         for g in train_gs:
             node_feature_dim = max(g.ndata["type"].max().item(), node_feature_dim)
@@ -159,6 +161,8 @@ def preload_entity_level_dataset(path):
             edge_feature_dim = max(g.edata["type"].max().item(), edge_feature_dim)
         edge_feature_dim += 1
         result_test_gs = []
+
+        # encode node/edge type
         for g in test_gs:
             g = transform_graph(g, node_feature_dim, edge_feature_dim)
             result_test_gs.append(g)

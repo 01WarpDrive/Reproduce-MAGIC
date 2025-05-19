@@ -22,3 +22,8 @@ theia.txt
 ## cadets
 ta1-cadets-e3-official*
 cadets.txt
+
+data/
+eval_result/
+checkpoints/
+*.pt

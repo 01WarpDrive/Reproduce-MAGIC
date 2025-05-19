@@ -161,14 +161,25 @@ def evaluate_batch_level_using_knn(repeat, dataset, embeddings, labels):
         return auc, 0.0
 
 
-def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
+def evaluate_entity_level_using_knn_1(dataset, x_train, x_test, y_test):
+    """for independent network anomaly detection
+
+    Args:
+        dataset (_type_): _description_
+        x_train (_type_): _description_
+        x_test (_type_): _description_
+        y_test (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     x_train_mean = x_train.mean(axis=0)
     x_train_std = x_train.std(axis=0)
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
 
     if dataset == 'cadets':
-        n_neighbors = 200
+        n_neighbors = 400 # 200
     else:
         n_neighbors = 10
 
@@ -177,6 +188,7 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
 
     save_dict_path = './eval_result/distance_save_{}.pkl'.format(dataset)
     if not os.path.exists(save_dict_path):
+        print('get distance')
         idx = list(range(x_train.shape[0]))
         random.shuffle(idx)
         distances, _ = nbrs.kneighbors(x_train[idx][:min(50000, x_train.shape[0])], n_neighbors=n_neighbors)
@@ -193,12 +205,18 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
             mean_distance, distances = pkl.load(f)
     score = distances / mean_distance
     del distances
+
     auc = roc_auc_score(y_test, score)
     prec, rec, threshold = precision_recall_curve(y_test, score)
+
     f1 = 2 * prec * rec / (rec + prec + 1e-9)
-    best_idx = -1
+    best_idx = f1.argmax()
+
+    # To repeat peak performance
     for i in range(len(f1)):
-        # To repeat peak performance
+        if 'optc' in dataset and rec[i] < 0.05:
+            best_idx = i - 1
+            break
         if dataset == 'trace' and rec[i] < 0.99979:
             best_idx = i - 1
             break
@@ -231,4 +249,188 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
     print('FN: {}'.format(fn))
     print('TP: {}'.format(tp))
     print('FP: {}'.format(fp))
+
+    if 'optc' in dataset:
+        with open(f'./data/{dataset}/node_list.txt', 'r') as file:
+            node_list = file.read().split()    
+        alarm_list = []
+        for i in range(len(score)):
+            if score[i] >= best_thres:
+                alarm_list.append(node_list[i])
+        with open(f'./data/{dataset}/alarm_list.txt', 'w') as file:
+            file.write('\n'.join(alarm_list))
+
+    return auc, 0.0, None, None
+
+
+def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
+    x_train_mean = x_train.mean(axis=0)
+    x_train_std = x_train.std(axis=0)
+    x_train = (x_train - x_train_mean) / x_train_std
+    x_test = (x_test - x_train_mean) / x_train_std
+
+    if dataset == 'cadets':
+        n_neighbors = 200
+    elif 'optc' in dataset:
+        n_neighbors = 200
+    else:
+        n_neighbors = 10
+
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors, n_jobs=-1)
+    nbrs.fit(x_train)
+
+    save_dict_path = './eval_result/distance_save_{}.pkl'.format(dataset)
+    if not os.path.exists(save_dict_path):
+        print('get distance')
+        idx = list(range(x_train.shape[0]))
+        random.shuffle(idx)
+        distances, _ = nbrs.kneighbors(x_train[idx][:min(50000, x_train.shape[0])], n_neighbors=n_neighbors)
+        del x_train
+        mean_distance = distances.mean()
+        del distances
+        distances, _ = nbrs.kneighbors(x_test, n_neighbors=n_neighbors)
+        save_dict = [mean_distance, distances.mean(axis=1)]
+        distances = distances.mean(axis=1)
+        with open(save_dict_path, 'wb') as f:
+            pkl.dump(save_dict, f)
+    else:
+        with open(save_dict_path, 'rb') as f:
+            mean_distance, distances = pkl.load(f)
+    score = distances / mean_distance
+    del distances
+
+    auc = roc_auc_score(y_test, score)
+    prec, rec, threshold = precision_recall_curve(y_test, score)
+
+    f1 = 2 * prec * rec / (rec + prec + 1e-9)
+    best_idx = f1.argmax()
+
+    # To repeat peak performance
+    for i in range(len(f1)):
+        if 'optc' in dataset and rec[i] < 1:
+            best_idx = i - 1
+            break
+        if dataset == 'trace' and rec[i] < 0.99979:
+            best_idx = i - 1
+            break
+        if dataset == 'theia' and prec[i] > 0.983 and rec[i] > 0.9998: # rec[i] < 0.9996
+            best_idx = i # best_idx = i - 1
+            break
+        if dataset == 'cadets' and rec[i] < 0.9976: # rec[i] < 0.9976
+            best_idx = i - 1 # best_idx = i - 1
+            break
+    best_thres = threshold[best_idx]
+
+    tn = 0
+    fn = 0
+    tp = 0
+    fp = 0
+    for i in range(len(y_test)):
+        if y_test[i] == 1.0 and score[i] >= best_thres:
+            tp += 1
+        if y_test[i] == 1.0 and score[i] < best_thres:
+            fn += 1
+        if y_test[i] == 0.0 and score[i] < best_thres:
+            tn += 1
+        if y_test[i] == 0.0 and score[i] >= best_thres:
+            fp += 1
+    print('AUC: {}'.format(auc))
+    print('F1: {}'.format(f1[best_idx]))
+    print('PRECISION: {}'.format(prec[best_idx]))
+    print('RECALL: {}'.format(rec[best_idx]))
+    print(f'FPR: {fp / (fp + tn)}')
+    print('TN: {}'.format(tn))
+    print('FN: {}'.format(fn))
+    print('TP: {}'.format(tp))
+    print('FP: {}'.format(fp))
+
+    if 'optc' in dataset:
+        with open(f'./data/{dataset}/node_list.txt', 'r') as file:
+            node_list = file.read().split()    
+        alarm_list = []
+        for i in range(len(score)):
+            if score[i] >= best_thres:
+                alarm_list.append(node_list[i])
+        with open(f'./data/{dataset}/alarm_list.txt', 'w') as file:
+            file.write('\n'.join(alarm_list))
+
+    return auc, 0.0, None, None
+
+
+def evaluate_entity_level_using_knn_2(dataset, x_train, x_test, y_test):
+    x_train_mean = x_train.mean(axis=0)
+    x_train_std = x_train.std(axis=0)
+    x_train = (x_train - x_train_mean) / x_train_std
+    x_test = (x_test - x_train_mean) / x_train_std
+
+    n_neighbors = 2
+
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors, n_jobs=-1)
+    nbrs.fit(x_train)
+    print('finish fit')
+
+    save_dict_path = './eval_result/distance_save_{}.pkl'.format(dataset)
+    if not os.path.exists(save_dict_path):
+        print('get distance')
+        idx = list(range(x_train.shape[0]))
+        random.shuffle(idx)
+        distances, _ = nbrs.kneighbors(x_train[idx][:min(50000, x_train.shape[0])], n_neighbors=n_neighbors)
+        del x_train
+        mean_distance = distances.mean()
+        del distances
+        print('finish x train')
+        distances, _ = nbrs.kneighbors(x_test, n_neighbors=n_neighbors)
+        save_dict = [mean_distance, distances.mean(axis=1)]
+        distances = distances.mean(axis=1)
+        print('finish x test')
+        with open(save_dict_path, 'wb') as f:
+            pkl.dump(save_dict, f)
+        print('finish writing')
+    else:
+        with open(save_dict_path, 'rb') as f:
+            mean_distance, distances = pkl.load(f)
+    score = distances / mean_distance
+    del distances
+
+    print(len(score))
+
+    threshold = np.percentile(score, 99.9995)
+    alarm_ids = set()
+    for id, s in enumerate(score):
+        if s > threshold:
+            alarm_ids.add(id)
+
+    node_list = []
+    with open(f'./data/{dataset}/node_list.txt', 'r') as file:
+        for l in file:
+            node_list.append(l.strip())
+    anomalies = [node_list[idx] for idx in alarm_ids]
+    print(f'alarms ip_port {len(anomalies)}')
+
+    import json
+    bro_ecar_map = {}
+    with open('data/optc_zeek/ecarbro_0923_0201.json', 'r') as file:
+        for line in file:
+            event = json.loads(line)
+            # bro_ecar_map[event['properties']['bro_uid']] = {event['objectID'], event['actorID']}
+            bro_ecar_map[event['properties']['bro_uid']] = {event['objectID']}
+    print(f'bro_ecar_map {len(bro_ecar_map)}')
+
+    anomaly_ecar = set()
+    with open('data/optc_zeek/test_network_0922_ecarbro.json', 'r') as f:
+        for line in f:
+            row = json.loads(line)
+            uid = row['uid']
+            if uid in bro_ecar_map:
+                if row['src_ip_port'] in anomalies or row['dest_ip_port'] in anomalies:
+                    anomaly_ecar = anomaly_ecar | bro_ecar_map[uid]
+    
+    print(len(anomaly_ecar))
+    out_path = f'data/{dataset}/net_alarm.txt'
+    with open(out_path, 'w') as f:
+        for id in anomaly_ecar:
+            f.write(id + '\n')
+
+    auc = 0
+
     return auc, 0.0, None, None

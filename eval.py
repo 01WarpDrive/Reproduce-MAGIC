@@ -63,7 +63,6 @@ def main(main_args):
                 x_test.append(model.embed(g).cpu().numpy())
                 del g
             x_test = np.concatenate(x_test, axis=0)
-
             n = x_test.shape[0]
             y_test = np.zeros(n)
             y_test[malicious] = 1.0
@@ -79,8 +78,9 @@ def main(main_args):
             result_x_test = x_test[test_idx]
             result_y_test = y_test[test_idx]
             del x_test, y_test
+
             test_auc, test_std, _, _ = evaluate_entity_level_using_knn(dataset_name, x_train, result_x_test,
-                                                                       result_y_test)
+                                                                    result_y_test)
     print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")
     return
 

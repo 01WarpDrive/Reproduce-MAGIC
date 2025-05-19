@@ -1,3 +1,34 @@
+# logs
+
+* test model GMAE2
+
+# Dependencies
+
+```
+conda create -n magic python=3.8
+conda activate magic
+pip install -r requirements.txt
+
+pip install pytz
+pip install matplotlib
+```
+
+# Issues
+* File "./model/autoencoder.py", line 32, in build_model, `norm='batchnorm',`, and file "./utils/utils.py", line 65, in create_norm, `elif name == "batchnorm":`. Hence norm is None defaultly.
+
+
+```
+cd .\utils\
+python .\trace_parser.py
+cd ..
+python train.py --dataset optc_zeek --lr 0.0005
+python eval2.py --dataset optc_zeek
+```
+
+
+
+
+
 # MAGIC
 
 This is official code for the USENIX Security 24 paper:
@@ -52,6 +83,7 @@ This is a guildline on reproducing MAGIC's evaluations. There are three options:
 Make sure you have MAGIC's parameters saved in `checkpoints/` and KNN distances saved in `eval_result/`. Then execute `eval.py` and assign the evaluation dataset using the following command:
 ```
   python eval.py --dataset *your_dataset*
+python eval.py --dataset cadets
 ```
 ### Standard Evaluation
 
@@ -63,17 +95,17 @@ Standard evaluation trains the detection module from scratch, so the KNN distanc
 
 Namely, everything, including MAGIC's graph representation module and its detection module, are going to be trained from raw data. Remove model parameters from `checkpoints/` and saved KNN distances from `eval_result/` and execute `train.py` to train the graph representation module. 
 ```
-  python train.py --dataset *your_dataset*
+python train.py --dataset *your_dataset*
 ```
 Then execute `eval.py` the same as in standard evaluation:
 ```
-  python eval.py --dataset *your_dataset*
+python eval.py --dataset *your_dataset*
 ```
 For more running options, please refer to `utils/config.py`
 
 
 ## Cite 
- 
+
 If you make advantage of MAGIC in your research, please cite the following in your manuscript:
 
 ```

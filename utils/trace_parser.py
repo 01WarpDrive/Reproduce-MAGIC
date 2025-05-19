@@ -8,6 +8,9 @@ from tqdm import tqdm
 import networkx as nx
 import pickle as pkl
 
+from datetime import datetime
+import pytz
+
 
 node_type_dict = {}
 edge_type_dict = {}
@@ -26,6 +29,24 @@ metadata = {
     'cadets':{
             'train': ['ta1-cadets-e3-official.json','ta1-cadets-e3-official.json.1', 'ta1-cadets-e3-official.json.2', 'ta1-cadets-e3-official-2.json.1'],
             'test': ['ta1-cadets-e3-official-2.json']
+    },
+    'optc_day25':{
+            'train': ['benign_20-23Seq19_0051_.ecar-2019-12-07T16-15-43.163.json',
+                    'benign_20-23Seq19_0051_.ecar-2019-12-07T18-18-31.331.json',
+                    'benign_20-23Seq19_0051_.ecar-2019-12-07T21-31-30.259.json',
+                    'benign_20-23Seq19_0051_.ecar-2019-12-08T00-56-58.175.json',
+                    'benign_20-23Seq19_0051_.ecar-2019-12-08T04-30-36.852.json',
+                    'benign_20-23Seq19_0051_.ecar-last.json'
+                    ],
+            'test': ['evaluation_25Sept_0051_.ecar-last.json']
+    },
+    'optc_day23':{
+            'train': ['benign_20-23Seq19_0201_.ecar-2019-12-07T19-16-05.788.json',
+                    'benign_20-23Seq19_0201_.ecar-2019-12-07T22-06-33.589.json',
+                    'benign_20-23Seq19_0201_.ecar-2019-12-08T01-57-30.012.json',
+                    'benign_20-23Seq19_0201_.ecar-2019-12-08T05-46-21.658.json',
+                    'benign_20-23Seq19_0201_.ecar-last.json'],
+            'test': ['SysClient0201.systemia.com.json']
     }
 }
 
@@ -48,30 +69,40 @@ def read_single_graph(dataset, malicious, path, test=False):
     path = '../data/{}/'.format(dataset) + path + '.txt'
     f = open(path, 'r')
     lines = []
+
+    # for edge information
     for l in f.readlines():
         split_line = l.split('\t')
         src, src_type, dst, dst_type, edge_type, ts = split_line
         ts = int(ts)
-        if not test:
+
+        if 'optc' not in dataset and not test:
             if src in malicious or dst in malicious:
                 if src in malicious and src_type != 'MemoryObject':
                     continue
                 if dst in malicious and dst_type != 'MemoryObject':
                     continue
 
+        # node type encoding
         if src_type not in node_type_dict:
             node_type_dict[src_type] = node_type_cnt
             node_type_cnt += 1
         if dst_type not in node_type_dict:
             node_type_dict[dst_type] = node_type_cnt
             node_type_cnt += 1
+
+        # edge type encoding
         if edge_type not in edge_type_dict:
             edge_type_dict[edge_type] = edge_type_cnt
             edge_type_cnt += 1
-        if 'READ' in edge_type or 'RECV' in edge_type or 'LOAD' in edge_type:
+        
+        # get edge information
+        if 'optc' not in dataset and 'READ' in edge_type or 'RECV' in edge_type or 'LOAD' in edge_type:
             lines.append([dst, src, dst_type, src_type, edge_type, ts])
         else:
             lines.append([src, dst, src_type, dst_type, edge_type, ts])
+
+    # sort by time
     lines.sort(key=lambda l: l[5])
 
     node_map = {}
@@ -83,6 +114,7 @@ def read_single_graph(dataset, malicious, path, test=False):
         src_type_id = node_type_dict[src_type]
         dst_type_id = node_type_dict[dst_type]
         edge_type_id = edge_type_dict[edge_type]
+        # node encoding, add nodes
         if src not in node_map:
             node_map[src] = node_cnt
             g.add_node(node_cnt, type=src_type_id)
@@ -95,26 +127,39 @@ def read_single_graph(dataset, malicious, path, test=False):
             node_type_map[dst] = dst_type
             node_list.append(dst)
             node_cnt += 1
+        # add edges
         if not g.has_edge(node_map[src], node_map[dst]):
             g.add_edge(node_map[src], node_map[dst], type=edge_type_id)
-    return node_map, g
+
+    return node_map, g, node_list
 
 
 def preprocess_dataset(dataset):
+    """get the mapping relation between id and node type, id and node name; extract node/edge information
+
+    Args:
+        dataset (_type_): _description_
+    """
     id_nodetype_map = {}
     id_nodename_map = {}
+
+    # get the mapping relation from all dataset files
     for file in os.listdir('../data/{}/'.format(dataset)):
         if 'json' in file and not '.txt' in file and not 'names' in file and not 'types' in file and not 'metadata' in file:
             print('reading {} ...'.format(file))
             f = open('../data/{}/'.format(dataset) + file, 'r', encoding='utf-8')
             for line in tqdm(f):
+                # special for DARPA
                 if 'com.bbn.tc.schema.avro.cdm18.Event' in line or 'com.bbn.tc.schema.avro.cdm18.Host' in line: continue
                 if 'com.bbn.tc.schema.avro.cdm18.TimeMarker' in line or 'com.bbn.tc.schema.avro.cdm18.StartMarker' in line: continue
                 if 'com.bbn.tc.schema.avro.cdm18.UnitDependency' in line or 'com.bbn.tc.schema.avro.cdm18.EndMarker' in line: continue
                 if len(pattern_uuid.findall(line)) == 0: print(line)
+
+                # get id and possible type
                 uuid = pattern_uuid.findall(line)[0]
                 subject_type = pattern_type.findall(line)
 
+                # special type
                 if len(subject_type) < 1:
                     if 'com.bbn.tc.schema.avro.cdm18.MemoryObject' in line:
                         subject_type = 'MemoryObject'
@@ -125,15 +170,22 @@ def preprocess_dataset(dataset):
                 else:
                     subject_type = subject_type[0]
 
+                # special id
                 if uuid == '00000000-0000-0000-0000-000000000000' or subject_type in ['SUBJECT_UNIT']:
                     continue
+
+                # map id with type
                 id_nodetype_map[uuid] = subject_type
+
+                # map id with name
                 if 'FILE' in subject_type and len(pattern_file_name.findall(line)) > 0:
                     id_nodename_map[uuid] = pattern_file_name.findall(line)[0]
                 elif subject_type == 'SUBJECT_PROCESS' and len(pattern_process_name.findall(line)) > 0:
                     id_nodename_map[uuid] = pattern_process_name.findall(line)[0]
                 elif subject_type == 'NetFlowObject' and len(pattern_netflow_object_name.findall(line)) > 0:
                     id_nodename_map[uuid] = pattern_netflow_object_name.findall(line)[0]
+
+    # for the train/test files, get node -> edge -> node information
     for key in metadata[dataset]:
         for file in metadata[dataset][key]:
             if os.path.exists('../data/{}/'.format(dataset) + file + '.txt'):
@@ -181,23 +233,125 @@ def preprocess_dataset(dataset):
         json.dump(id_nodetype_map, fw)
 
 
+def ISO8601_to_UTC_millisecond(time_str):
+    dt = datetime.fromisoformat(time_str)
+    dt_utc = dt.astimezone(pytz.UTC)
+    timestamp_seconds = dt_utc.timestamp()
+    timestamp_milliseconds = int(timestamp_seconds * 1000)
+
+    return str(timestamp_milliseconds)
+
+
+
+def preprocess_dataset_optc(dataset):
+    """special for optc
+    1. use data of a single host
+
+    Args:
+        dataset (_type_): _description_
+    """
+    id_nodetype_map = {}
+    id_nodename_map = {}
+    
+    for file in os.listdir('../data/{}/'.format(dataset)):
+        if 'json' in file and not '.txt' in file and not 'names' in file and not 'types' in file and not 'metadata' in file:
+            print('reading {} ...'.format(file))
+            f = open('../data/{}/'.format(dataset) + file, 'r', encoding='utf-8')
+            for line in tqdm(f):
+                event = json.loads(line)
+                type = event['object']
+
+                if type not in ['PROCESS', 'FILE', 'FLOW']:
+                    continue
+                properties = event['properties']
+                try:
+                    actor_id = event['actorID']
+                    id_nodetype_map[actor_id] = 'PROCESS'
+
+                    object_id = event['objectID']
+                    id_nodetype_map[object_id] = type
+                    
+                    if type == 'FLOW':
+                        id_nodename_map[actor_id] = properties['image_path']
+                        id_nodename_map[object_id] = f"{properties['src_ip']} {properties['src_port']} {properties['dest_ip']} {properties['dest_port']} {properties['direction']}"
+                    elif type == 'FILE':
+                        id_nodename_map[actor_id] = properties['image_path']
+                        id_nodename_map[object_id] = properties['file_path']
+                    # elif type == 'MODULE':
+                    #     id_nodename_map[actor_id] = properties['image_path']
+                    #     id_nodename_map[object_id] = properties['module_path']
+                    else:
+                        id_nodename_map[actor_id] = properties['parent_image_path']
+                        id_nodename_map[object_id] = properties['image_path']
+                except KeyError:
+                    continue
+
+    for key in metadata[dataset]:
+        for file in metadata[dataset][key]:
+            if os.path.exists('../data/{}/'.format(dataset) + file + '.txt'):
+                continue
+            f = open('../data/{}/'.format(dataset) + file, 'r', encoding='utf-8')
+            fw = open('../data/{}/'.format(dataset) + file + '.txt', 'w', encoding='utf-8')
+            print('processing {} ...'.format(file))
+            for line in tqdm(f):
+                event = json.loads(line)
+                try:
+                    srcId = event['actorID']
+                    srcType = id_nodetype_map[srcId]
+                    dstId = event['objectID']
+                    dstType = id_nodetype_map[dstId]
+                    edgeType = event['action']
+                    timestamp = ISO8601_to_UTC_millisecond(event['timestamp'])
+                    this_edge = str(srcId) + '\t' + str(srcType) + '\t' + str(dstId) + '\t' + str(
+                            dstType) + '\t' + str(edgeType) + '\t' + str(timestamp) + '\n'
+                    fw.write(this_edge)
+                except:
+                    continue
+
+            fw.close()
+            f.close()
+    
+    if len(id_nodename_map) != 0:
+        fw = open('../data/{}/'.format(dataset) + 'names.json', 'w', encoding='utf-8')
+        json.dump(id_nodename_map, fw)
+    if len(id_nodetype_map) != 0:
+        fw = open('../data/{}/'.format(dataset) + 'types.json', 'w', encoding='utf-8')
+        json.dump(id_nodetype_map, fw)
+
+
 def read_graphs(dataset):
+    # load malicious enity ids
     malicious_entities = '../data/{}/{}.txt'.format(dataset, dataset)
     f = open(malicious_entities, 'r')
     malicious_entities = set()
     for l in f.readlines():
         malicious_entities.add(l.lstrip().rstrip())
 
-    preprocess_dataset(dataset)
+    # get mapping relationships, node/edge information
+    if 'optc' in dataset:
+        preprocess_dataset_optc(dataset)
+    else:
+        preprocess_dataset(dataset)
+
+    # get graphs
     train_gs = []
     for file in metadata[dataset]['train']:
-        _, train_g = read_single_graph(dataset, malicious_entities, file, False)
+        _, train_g, _ = read_single_graph(dataset, malicious_entities, file, False)
         train_gs.append(train_g)
     test_gs = []
+
+    # encode test node id
     test_node_map = {}
     count_node = 0
     for file in metadata[dataset]['test']:
-        node_map, test_g = read_single_graph(dataset, malicious_entities, file, True)
+        node_map, test_g, node_list = read_single_graph(dataset, malicious_entities, file, True)
+
+        if 'optc' in dataset:
+            with open(f'../data/{dataset}/node_list.txt', 'w') as file:
+                for id in node_list:
+                    file.write(id)
+                    file.write('\n')
+
         assert len(node_map) == test_g.number_of_nodes()
         test_gs.append(test_g)
         for key in node_map:
@@ -213,6 +367,8 @@ def read_graphs(dataset):
         f = open('../data/{}/malicious_names.txt'.format(dataset), 'w', encoding='utf-8')
         final_malicious_entities = []
         malicious_names = []
+
+        # get the final malicious entities in test data
         for e in malicious_entities:
             if e in test_node_map and e in id_nodetype_map and id_nodetype_map[e] != 'MemoryObject' and id_nodetype_map[e] != 'UnnamedPipeObject':
                 final_malicious_entities.append(test_node_map[e])
@@ -239,9 +395,9 @@ def read_graphs(dataset):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CDM Parser')
-    parser.add_argument("--dataset", type=str, default="trace")
+    parser.add_argument("--dataset", type=str, default="optc_day25")
     args = parser.parse_args()
-    if args.dataset not in ['trace', 'theia', 'cadets']:
+    if args.dataset not in ['trace', 'theia', 'cadets', 'optc_day23', 'optc_day25']:
         raise NotImplementedError
     read_graphs(args.dataset)
 
