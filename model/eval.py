@@ -179,7 +179,7 @@ def evaluate_entity_level_using_knn_1(dataset, x_train, x_test, y_test):
     x_test = (x_test - x_train_mean) / x_train_std
 
     if dataset == 'cadets':
-        n_neighbors = 400 # 200
+        n_neighbors = 200
     else:
         n_neighbors = 10
 
@@ -272,7 +272,7 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
     if dataset == 'cadets':
         n_neighbors = 200
     elif 'optc' in dataset:
-        n_neighbors = 200
+        n_neighbors = 10
     else:
         n_neighbors = 10
 
@@ -307,17 +307,20 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
 
     # To repeat peak performance
     for i in range(len(f1)):
-        if 'optc' in dataset and rec[i] < 1:
+        if 'optc' in dataset and rec[i] < 0.02:
             best_idx = i - 1
             break
         if dataset == 'trace' and rec[i] < 0.99979:
             best_idx = i - 1
             break
-        if dataset == 'theia' and prec[i] > 0.983 and rec[i] > 0.9998: # rec[i] < 0.9996
-            best_idx = i # best_idx = i - 1
+        if dataset == 'theia' and rec[i] < 0.99996:
+            best_idx = i - 1
             break
-        if dataset == 'cadets' and rec[i] < 0.9976: # rec[i] < 0.9976
-            best_idx = i - 1 # best_idx = i - 1
+        if dataset == 'cadets' and rec[i] < 0.9976:
+            best_idx = i - 1
+            break
+        if dataset == 'lanl' and rec[i] < 0.1:
+            best_idx = i - 1
             break
     best_thres = threshold[best_idx]
 
@@ -338,7 +341,6 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
     print('F1: {}'.format(f1[best_idx]))
     print('PRECISION: {}'.format(prec[best_idx]))
     print('RECALL: {}'.format(rec[best_idx]))
-    print(f'FPR: {fp / (fp + tn)}')
     print('TN: {}'.format(tn))
     print('FN: {}'.format(fn))
     print('TP: {}'.format(tp))
@@ -353,6 +355,39 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
                 alarm_list.append(node_list[i])
         with open(f'./data/{dataset}/alarm_list.txt', 'w') as file:
             file.write('\n'.join(alarm_list))
+    
+    if dataset == 'lanl':
+        import networkx as nx
+        alarm_set = set()
+        for i in range(len(score)):
+            if score[i] >= best_thres:
+                alarm_set.add(i)
+            
+        with open('./data/lanl/malicious_edges.pkl', 'rb') as f:
+            malicious_edges = set(pkl.load(f))
+        malicious_nodes =set()
+        for edge in malicious_edges:
+            malicious_nodes.add(edge[0])
+            malicious_nodes.add(edge[1])
+
+        with open('./data/lanl/test0.pkl', 'rb') as f:
+            G = pkl.load(f).to_networkx()
+        edges = list(G.edges())
+        TP, FP, TN, FN = 0, 0, 0, 0
+        for e in edges:
+            if e[0] in alarm_set or e[1] in alarm_set:
+                if e in malicious_edges:
+                    TP += 1
+                elif e[0] in malicious_nodes or e[1] in malicious_nodes: # 检测到的节点与恶意事件相关
+                    TP += 1
+                else:
+                    FP += 1
+            else:
+                if e in malicious_edges:
+                    FN += 1
+                else:
+                    TN += 1
+        print(TN, FP, FN, TP)
 
     return auc, 0.0, None, None
 

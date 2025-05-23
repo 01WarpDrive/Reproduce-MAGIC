@@ -1,3 +1,4 @@
+# gmae2
 from .gat import GAT
 from functools import partial
 from itertools import chain

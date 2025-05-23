@@ -1,3 +1,4 @@
+# gmae
 from .gat import GAT
 from utils.utils import create_norm
 from functools import partial

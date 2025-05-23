@@ -1,8 +1,10 @@
-# logs
+# Reproduce-MAGIC
+
+## logs
 
 * test model GMAE2
 
-# Dependencies
+## Dependencies
 
 ```
 conda create -n magic python=3.8
@@ -13,9 +15,11 @@ pip install pytz
 pip install matplotlib
 ```
 
-# Issues
+## Issues
 * File "./model/autoencoder.py", line 32, in build_model, `norm='batchnorm',`, and file "./utils/utils.py", line 65, in create_norm, `elif name == "batchnorm":`. Hence norm is None defaultly.
 
+* data parse file such as `trace_parser.py` uses `nx.DiGraph()`, which can not construct muti-edges. This doesn't match with 
+the edge encoding method in paper.
 
 ```
 cd .\utils\
@@ -25,6 +29,7 @@ python train.py --dataset optc_zeek --lr 0.0005
 python eval2.py --dataset optc_zeek
 ```
 
+## data prerpocess
 
 
 

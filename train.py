@@ -54,6 +54,12 @@ def main(main_args):
         main_args.num_hidden = 64
         main_args.max_epoch = 50
         main_args.num_layers = 3
+    elif dataset_name == 'lanl':
+        main_args.num_hidden = 64
+        main_args.max_epoch = 50
+        main_args.num_layers = 4
+        main_args.lr = 5e-4
+        # main_args.weight_decay = 1e-4
     else:
         main_args.num_hidden = 64
         main_args.max_epoch = 125
