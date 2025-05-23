@@ -62,7 +62,7 @@ def main(main_args):
         result_y_test = y_test[test_idx]
         del x_test, y_test
 
-        test_auc, test_std, _, _ = evaluate_entity_level_using_knn(dataset_name, x_train, result_x_test,
+    test_auc, test_std, _, _ = evaluate_entity_level_using_VAE(dataset_name, x_train, result_x_test,
                                                                 result_y_test)
 
     print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")

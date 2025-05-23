@@ -5,11 +5,13 @@ import re
 from tqdm import tqdm
 import networkx as nx
 import pickle as pkl
+import numpy as np
 
 
 SRC_DIR = 'F:/datasets/LANL/unzip/' # Directory of flows.txt, auth.txt
 RED = f'{SRC_DIR}redteam.txt' # Location of redteam.txt
 SRC = f'{SRC_DIR}auth.txt' # Location of auth.txt
+FLOW = f'{SRC_DIR}flows.txt'
 DATE_OF_EVIL_LANL = 150885 # train data before time
 END_TEST_TIME = 1270000
 
@@ -35,46 +37,51 @@ def read_single_graph(path):
     g = nx.DiGraph()
     print('converting {} ...'.format(path))
     f = open(path, 'r')
+    in_lines = f.readlines()
     lines = []
+
+    proto_map = {}
+    cnt = 0
+    for l in in_lines:
+        src, src_type, dst, dst_type, edge_type, ts = l.split('\t')
+        dur, src_p, dst_p, proto, pa_cnt, by_cnt = edge_type.split('_')
+        if proto not in proto_map:
+            proto_map[proto] = cnt
+            cnt += 1
 
     node_type_map = {}
     edge_type_map = {}
-    for l in f.readlines():
+    for l in in_lines:
         src, src_type, dst, dst_type, edge_type, ts = l.split('\t')
+        dur, src_p, dst_p, proto, pa_cnt, by_cnt = edge_type.split('_')
+
         if src not in node_type_map:
-            node_type_map[src] = src_type
+            node_type_map[src] = [False, False]
         if dst not in node_type_map:
-            node_type_map[dst] = dst_type
-        
+            node_type_map[dst] = [False, False]
+
+        idx = 0 if src_p[0] == 'N' else 1
+        node_type_map[src][idx] = True
+        idx = 0 if dst_p[0] == 'N' else 1
+        node_type_map[dst][idx] = True
+
+        dur, pa_cnt, by_cnt = int(dur), int(pa_cnt), int(by_cnt)
         edge = (src, dst)
-        src_u, dst_u, s_or_f = edge_type.split('_')
-        if edge not in edge_type_map:
-            edge_type_map[edge] = [False, False, False, False, False, False, False, False]
-        
-        if src_u[0] == 'C':
-            idx = 0
-        elif src_u[0] == 'U':
-            idx = 1
+        if edge in edge_type_map:
+            edge_type_map[edge][0].append(dur)
+            edge_type_map[edge][1].append(pa_cnt)
+            edge_type_map[edge][2].append(by_cnt)
         else:
-            idx = 2
-        edge_type_map[edge][idx] = True
+            edge_type_map[edge] = [[dur], [pa_cnt], [by_cnt]]
 
-        if dst_u[0] == 'C':
-            idx = 3
-        elif dst_u[0] == 'U':
-            idx = 4
-        else:
-            idx = 5
-        edge_type_map[edge][idx] = True
-
-        if s_or_f == 'Success':
-            idx = 6
-        else:
-            idx = 7
-        edge_type_map[edge][idx] = True
-    
+    temp_flows = edge_type_map
+    for et in temp_flows.keys():
+        edge_type_map[et] = [len(temp_flows[et][0]), np.mean(temp_flows[et][0]), np.std(temp_flows[et][0]), \
+        np.mean(temp_flows[et][1]), np.std(temp_flows[et][1]), np.mean(temp_flows[et][2]), np.std(temp_flows[et][2])]
     for k in edge_type_map:
         edge_type_map[k] = tuple(edge_type_map[k])
+    for k in node_type_map:
+        node_type_map[k] = tuple(node_type_map[k])
     
     # node type encoding
     for t in node_type_map.values():
@@ -125,6 +132,13 @@ def map_or_add(m, k, v):
         m[k] = {v}
 
 
+def get_auth_com():
+    path = '../data/lanl/types.json'
+    with open(path, 'r') as f:
+        com_type_map = json.load(f)
+    return com_type_map
+
+
 def preprocess_dataset():
     """get the mapping relation between id and node type, id and node name; extract node/edge information
 
@@ -133,35 +147,41 @@ def preprocess_dataset():
     """
     id_nodetype_map = {}
     id_nodename_map = {}
+    com_type_map = get_auth_com()
 
-    with open(SRC, 'r') as f:
+    with open(FLOW, 'r') as f:
         for line in tqdm(f):
-            # Some filtering for better FPR/less Kerb noise
-            if 'NTLM' not in line.upper():
+            if '?' in line:
                 continue
 
-            #0: ts, 1: src_u, 2: dest_u, 3: src_c, 4: dest_c, 5:auth_type, 6: logon_type, 7: auth_orientation, 8: success/failure
+            #0: ts, 1: duration, 2: source computer, 3: source port, 4: destination computer, 5: destination port, 6: protocol, 7: packet count, 8: byte count
             tokens = line.strip().split(',')
-            src_com, dst_com = tokens[3], tokens[4]
-            # src_user, dst_user = tokens[1], tokens[2]
+
+            src_com, dst_com = tokens[2], tokens[4]
+            # TODO: whether to filter out the lines with src and dest that are not in auth
+            if not src_com in com_type_map or not dst_com in com_type_map:
+                continue
+
             # TODO: same node type
             id_nodetype_map[src_com] = 'com'
             id_nodetype_map[dst_com] = 'com'
             id_nodename_map[src_com] = src_com
             id_nodename_map[dst_com] = dst_com
-    
-    train_f = open('../data/lanl/train.txt', 'w')
-    test_f = open('../data/lanl/test.txt', 'w')
-    with open(SRC, 'r') as f:
-        for line in tqdm(f):
-            if 'NTLM' not in line.upper():
-                continue
 
+    train_f = open('../data/lanl-flow/train.txt', 'w')
+    test_f = open('../data/lanl-flow/test.txt', 'w')
+    with open(FLOW, 'r') as f:
+        for line in tqdm(f):
+            if '?' in line:
+                continue
             tokens = line.strip().split(',')
+            src_com, dst_com = tokens[2], tokens[4]
+            if not src_com in com_type_map or not dst_com in com_type_map:
+                continue
             # TODO: edge type
-            edgeType = '_'.join([tokens[1], tokens[2], tokens[8]])
+            edgeType = '_'.join([tokens[1], tokens[3], tokens[5], tokens[6], tokens[7], tokens[8]])
             timestamp = int(tokens[0])
-            srcId = tokens[3]
+            srcId = tokens[2]
             srcType = id_nodetype_map[srcId]
             dstId = tokens[4]
             dstType = id_nodetype_map[dstId]
@@ -179,10 +199,10 @@ def preprocess_dataset():
     test_f.close()
 
     if len(id_nodename_map) != 0:
-        fw = open('../data/lanl/names.json', 'w', encoding='utf-8')
+        fw = open('../data/lanl-flow/names.json', 'w', encoding='utf-8')
         json.dump(id_nodename_map, fw)
     if len(id_nodetype_map) != 0:
-        fw = open('../data/lanl/types.json', 'w', encoding='utf-8')
+        fw = open('../data/lanl-flow/types.json', 'w', encoding='utf-8')
         json.dump(id_nodetype_map, fw)
 
 
@@ -194,7 +214,7 @@ def load_malicious_entities():
     """
     with open(RED, 'r') as f:
         red_events = f.read().split()
-    red_events = red_events[1:]
+    # red_events = red_events[1:]
 
     malicious_entities = set()
     for event in red_events:
@@ -206,37 +226,31 @@ def load_malicious_entities():
 
     return malicious_entities
 
-
-def read_graphs(dataset):
+def read_graphs(dataset, is_prepro=True):
     # load malicious enities
     # TODO
     print('load malicous')
     malicious_entities = load_malicious_entities()
 
     # get mapping relationships, node/edge information
-    print('preprocess')
-    preprocess_dataset()
+    if is_prepro:
+        print('preprocess')
+        preprocess_dataset()
 
     # get graphs
     print('construct graph')
 
     train_gs = []
-    train_path = '../data/lanl/train.txt'
+    train_path = '../data/lanl-flow/train.txt'
     _, train_g, _ = read_single_graph(train_path)
     train_gs.append(train_g)
 
     test_gs = []
-    test_path = '../data/lanl/test.txt'
-    node_map, test_g, _ = read_single_graph(test_path)
+    test_path = '../data/lanl-flow/test.txt'
+    test_node_map, test_g, _ = read_single_graph(test_path)
     test_gs.append(test_g)
 
     print(len(node_type_dict), len(edge_type_dict))
-
-    test_node_map = {}
-    for key in node_map:
-        if key not in test_node_map:
-            test_node_map[key] = node_map[key]
-
 
     if os.path.exists('../data/{}/names.json'.format(dataset)) and os.path.exists('../data/{}/types.json'.format(dataset)):
         with open('../data/{}/names.json'.format(dataset), 'r', encoding='utf-8') as f:
@@ -254,6 +268,9 @@ def read_graphs(dataset):
                 malicious_names.append(id_nodename_map[e])
                 f.write('{}\t{}\n'.format(e, id_nodename_map[e]))
 
+        with open('../data/lanl-flow/test_node_map.pkl', 'wb') as f:
+            pkl.dump(test_node_map, f)
+
     pkl.dump((final_malicious_entities, malicious_names), open('../data/{}/malicious.pkl'.format(dataset), 'wb'))
     pkl.dump([nx.node_link_data(train_g) for train_g in train_gs], open('../data/{}/train.pkl'.format(dataset), 'wb'))
     pkl.dump([nx.node_link_data(test_g) for test_g in test_gs], open('../data/{}/test.pkl'.format(dataset), 'wb'))
@@ -261,8 +278,8 @@ def read_graphs(dataset):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CDM Parser')
-    parser.add_argument("--dataset", type=str, default="lanl")
+    parser.add_argument("--dataset", type=str, default="lanl-flow")
     args = parser.parse_args()
-    if args.dataset not in ['lanl']:
+    if args.dataset not in ['lanl-flow']:
         raise NotImplementedError
-    read_graphs(args.dataset)
+    read_graphs(args.dataset, False)
