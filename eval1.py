@@ -70,6 +70,7 @@ def main(main_args):
             for i, m in enumerate(malicious):
                 malicious_dict[m] = i
 
+            # optc with net
             with open('data/optc_day23/node_list.txt', 'r') as f:
                 node_list = f.readlines()
             print(len(node_list))

@@ -1,8 +1,37 @@
 # Reproduce-MAGIC
 
 ## logs
+1. delete other files before parsering data, only reserve train/test/label files
 
-* test model GMAE2
+
+* replace model GMAE2
+```
+cp model/gmae2
+```
+* test on lanl
+```bash
+cd .\utils\
+python .\lanl_parser.py
+cd ..
+python train.py --dataset lanl
+python eval_lanl.py --dataset lanl
+
+cd .\utils\
+python .\lanl-flow_parser.py
+cd ..
+python train.py --dataset lanl-flow
+python eval_lanl.py --dataset lanl-flow
+
+python eval_lanl.py --dataset lanl
+```
+* test on optc
+```bash
+cd .\utils\
+python optc_parser.py --dataset optc_day23
+cd ..
+python train.py --dataset optc_day23
+python eval.py --dataset optc_day23
+```
 
 ## Dependencies
 
@@ -20,18 +49,6 @@ pip install matplotlib
 
 * data parse file such as `trace_parser.py` uses `nx.DiGraph()`, which can not construct muti-edges. This doesn't match with 
 the edge encoding method in paper.
-
-```
-cd .\utils\
-python .\trace_parser.py
-cd ..
-python train.py --dataset optc_zeek --lr 0.0005
-python eval2.py --dataset optc_zeek
-```
-
-## data prerpocess
-
-
 
 
 # MAGIC

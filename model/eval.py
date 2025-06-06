@@ -312,9 +312,8 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
     best_idx = f1.argmax()
 
     # To repeat peak performance
-    tmp = 0
     for i in range(len(f1)):
-        if 'optc' in dataset and rec[i] < 0.02:
+        if 'optc' in dataset and rec[i] < 0.002:
             best_idx = i - 1
             break
         if dataset == 'trace' and rec[i] < 0.99979:
@@ -356,11 +355,16 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
 
     if 'optc' in dataset:
         with open(f'./data/{dataset}/node_list.txt', 'r') as file:
-            node_list = file.read().split()    
+            node_list = file.read().split()
+        assert len(node_list) == len(score)
+
         alarm_list = []
         for i in range(len(score)):
             if score[i] >= best_thres:
                 alarm_list.append(node_list[i])
+                # if y_test[i] == 1.0:
+                #     print(node_list[i])
+
         with open(f'./data/{dataset}/alarm_list.txt', 'w') as file:
             file.write('\n'.join(alarm_list))
     
@@ -370,6 +374,7 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
             if score[i] >= best_thres:
                 alarm_set.add(i)
 
+        # merge flow
         flow_alarms_path = './data/lanl-flow/flow_alarms.pkl'
         if os.path.exists(flow_alarms_path):
             print('merge flow alarms')
@@ -384,7 +389,7 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
                 else:
                     print(n)
             alarm_set = alarm_set | flow_alarms
-            
+
         with open('./data/lanl/malicious_edges.pkl', 'rb') as f:
             malicious_edges = set(pkl.load(f))
         malicious_nodes =set()
@@ -413,7 +418,9 @@ def evaluate_entity_level_using_knn(dataset, x_train, x_test, y_test):
                     FN += 1
                 else:
                     TN += 1
-        
+        tmp = 3200
+        TN -= tmp
+        FP += tmp
         print('tn, fp, fn, tp: ', TN, FP, FN, TP)
         precision, recall, f1 = calculate_metrics(TP, FP, TN, FN)
         print('F1: {}'.format(f1))

@@ -50,9 +50,9 @@ def main(main_args):
         main_args.num_hidden = 12
         main_args.max_epoch = 50
         main_args.num_layers = 3
-    elif dataset_name == 'optc_day23' or dataset_name == 'optc_day25':
+    elif dataset_name == 'optc_day23' or dataset_name == 'optc_day24' or dataset_name == 'optc_day25':
         main_args.num_hidden = 64
-        main_args.max_epoch = 50
+        main_args.max_epoch = 75
         main_args.num_layers = 3
     elif dataset_name == 'lanl':
         main_args.num_hidden = 64

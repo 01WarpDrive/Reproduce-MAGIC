@@ -1,13 +1,10 @@
 import argparse
 import json
 import os
-import random
 import re
-
 from tqdm import tqdm
 import networkx as nx
 import pickle as pkl
-
 from dateutil import parser as time_parser
 import pytz
 
@@ -30,29 +27,32 @@ metadata = {
             'train': ['ta1-cadets-e3-official.json','ta1-cadets-e3-official.json.1', 'ta1-cadets-e3-official.json.2', 'ta1-cadets-e3-official-2.json.1'],
             'test': ['ta1-cadets-e3-official-2.json']
     },
+    'optc_day23':{
+            'train': ['benign_20-23Seq19_0201_.ecar-2019-12-07T19-16-05.788.json',
+                    'benign_20-23Seq19_0201_.ecar-2019-12-07T22-06-33.589.json',
+                    'benign_20-23Seq19_0201_.ecar-2019-12-08T01-57-30.012.json',
+                    'benign_20-23Seq19_0201_.ecar-2019-12-08T05-46-21.658.json',
+                    'benign_20-23Seq19_0201_.ecar-last.json'],
+            'test': ['SysClient0201.systemia.com.json']
+    },
+    'optc_day24':{
+            'train': ['benign_20-23Seq19_0501_.ecar-2019-11-15T03-10-00.546.json',
+                    'benign_20-23Seq19_0501_.ecar-2019-11-15T05-59-37.208.json',
+                    'benign_20-23Seq19_0501_.ecar-2019-11-15T09-43-35.856.json',
+                    'benign_20-23Seq19_0501_.ecar-2019-11-15T13-29-59.064.json',
+                    'benign_20-23Seq19_0501_.ecar-2019-11-15T17-22-42.923.json',
+                    'benign_20-23Seq19_0501_.ecar-last.json'],
+            'test': ['SysClient0501.systemia.com.json']
+    },
     'optc_day25':{
             'train': ['benign_20-23Seq19_0051_.ecar-2019-12-07T16-15-43.163.json',
                     'benign_20-23Seq19_0051_.ecar-2019-12-07T18-18-31.331.json',
                     'benign_20-23Seq19_0051_.ecar-2019-12-07T21-31-30.259.json',
                     'benign_20-23Seq19_0051_.ecar-2019-12-08T00-56-58.175.json',
                     'benign_20-23Seq19_0051_.ecar-2019-12-08T04-30-36.852.json',
-                    'benign_20-23Seq19_0051_.ecar-last.json'
-                    ],
-            'test': ['evaluation_25Sept_0051_.ecar-last.json']
-    },
-    'optc_day23':{
-            'train': ['benign_20-23Seq19_0201_.ecar-2019-12-07T22-06-33.589.json',
-                    'benign_20-23Seq19_0201_.ecar-last.json'],
-            'test': ['SysClient0201.systemia.com.json']
+                    'benign_20-23Seq19_0051_.ecar-last.json'],
+            'test': ['SysClient0051.systemia.com.json']
     }
-    # 'optc_day23':{
-    #         'train': ['benign_20-23Seq19_0201_.ecar-2019-12-07T19-16-05.788.json',
-    #                 'benign_20-23Seq19_0201_.ecar-2019-12-07T22-06-33.589.json',
-    #                 'benign_20-23Seq19_0201_.ecar-2019-12-08T01-57-30.012.json',
-    #                 'benign_20-23Seq19_0201_.ecar-2019-12-08T05-46-21.658.json',
-    #                 'benign_20-23Seq19_0201_.ecar-last.json'],
-    #         'test': ['SysClient0201.systemia.com.json']
-    # }
 }
 
 
@@ -380,7 +380,7 @@ def read_graphs(dataset):
     train_gs = []
     for file in metadata[dataset]['train']:
         node_map, train_g, _ = read_single_graph(dataset, malicious_entities, file, False)
-        train_g = add_net_graph(train_g, file, len(node_map))
+        # train_g = add_net_graph(train_g, file, len(node_map))
         train_gs.append(train_g)
 
     test_gs = []
@@ -389,7 +389,7 @@ def read_graphs(dataset):
     count_node = 0
     for file in metadata[dataset]['test']:
         node_map, test_g, node_list = read_single_graph(dataset, malicious_entities, file, True)
-        test_g = add_net_graph(test_g, file, len(node_map))
+        # test_g = add_net_graph(test_g, file, len(node_map))
 
         # save node id as the encoding order
         with open(f'../data/{dataset}/node_list.txt', 'w') as file:
@@ -443,7 +443,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CDM Parser')
     parser.add_argument("--dataset", type=str, default="optc_day23")
     args = parser.parse_args()
-    if args.dataset not in ['trace', 'theia', 'cadets', 'optc_day23', 'optc_day25']:
+    if args.dataset not in ['trace', 'theia', 'cadets', 'optc_day23', 'optc_day24', 'optc_day25']:
         raise NotImplementedError
     read_graphs(args.dataset)
 
